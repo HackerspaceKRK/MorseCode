@@ -141,9 +141,7 @@ static void audio_bad() {
     while(--timer) {
         OUTPUT_PORT ^= _BV(AUDIO_OUTPUT);
         _delay_us(200);
-    }
-
-    
+    }    
 }
 
 static void handle_call_input(void) {
