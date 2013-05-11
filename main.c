@@ -121,15 +121,13 @@ static void blink_morse(uint8_t morse) {
     }
 
     for(i=0; i<=len; i++) {
+        OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
         if(_BV(i) & morse) { // 1
-            OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
             _delay_ms(900);
-            OUTPUT_PORT &= ~_BV(STATUS_LED_OUTPUT);
         } else {
-            OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
             _delay_ms(100);
-            OUTPUT_PORT &= ~_BV(STATUS_LED_OUTPUT);
         }
+        OUTPUT_PORT &= ~_BV(STATUS_LED_OUTPUT);
 
         _delay_ms(300);
     }
@@ -137,8 +135,6 @@ static void blink_morse(uint8_t morse) {
 
 static void audio_bad() {
     // software audio generation, we should do this by PWM...
-
-
 
     int timer = 2553; // must be odd
 
