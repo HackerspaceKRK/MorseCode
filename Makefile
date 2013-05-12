@@ -20,7 +20,7 @@
 
 
 # MCU name | ZMIENIC FUSY JBC!!!!!
-MCU = atmega8
+MCU = attiny2313
 
 # Output format. (can be srec, ihex, binary)
 FORMAT = ihex

@@ -74,13 +74,13 @@ static uint8_t pulse_length(uint8_t pin, uint8_t high_low, uint8_t timeout) {
 
     // configure Timer/Counter0
     TCNT0 = 0;
-    TCCR0 |= _BV(CS02) | _BV(CS00); // CK/1024
+    TCCR0B |= _BV(CS02) | _BV(CS00); // CK/1024
     TIMSK |= _BV(TOIE0); // enable overflow interrupt
     timer_count = 0;
 
     while(pin_is(pin, high_low) && timer_count<timeout) {};
 
-    TCCR0 = 0;
+    TCCR0B = 0;
 
     return timer_count;
 }
@@ -165,7 +165,7 @@ static void handle_call_input(void) {
     }
     wdt_disable();
 
-    blink_morse(readed);
+    // blink_morse(readed);
 }
 
 static void handle_program_input(void) {
