@@ -238,7 +238,6 @@ int main(void) {
         } else if(bit_is_clear(INPUT_PIN, PROGRAM_INPUT)) {
             handle_program_input();
         }
-
     }
 }
 
