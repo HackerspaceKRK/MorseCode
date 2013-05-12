@@ -53,7 +53,7 @@ uint8_t good_code = 0;
 uint8_t EEMEM CODE_EEPROM;
 
 // good software debouncing (intercom buttons are crappy!)
-uint8_t pin_is(uint8_t pin, uint8_t state) {
+static uint8_t pin_is(uint8_t pin, uint8_t state) {
     uint8_t i = 255;
     uint8_t hits = 0;
 
@@ -225,6 +225,11 @@ int main(void) {
 
     // action!
     sei();
+
+    // blink that we are ready
+    OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
+    _delay_ms(100);
+    OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
 
     // main loop
     for(;;) {
