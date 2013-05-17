@@ -9,12 +9,12 @@
 
 // PIN CONFIGURATION:
 //  INPUTS:
-//   PD2 (INT0) - CALL INPUT (also wake-up interrupt), external pull-down, goes high when triggered
+//   PD2 (INT0) - CALL INPUT (also wake-up interrupt), external pull-down, goes low when triggered
 //   PD3 (INT1) - PROGRAM CODE PUSH BUTTON, need internal pull-up, goes low when triggeded
 //  OUTPUTS:
 //   PB0 - OPTOCOUPLER (high active)
 //   PB3 - TRANSISTOR FOR GENERATING AUDIO (high active)
-//   PB2 - STATUS LEN (high active)
+//   PB2 - STATUS LED (high active)
 
 // HOW THIS SHIT IS SUPPOSED TO WORK:
 // 1. Store code in EEPROM as 1 byte. eg. 10111000 means 1-long, 1-short, 3-long
@@ -22,8 +22,8 @@
 //    blinking, next enter new code, finish entering with long push of PROGRAM CODE PUSH BUTTON (~5s)
 //    STATUS LED will blink
 // 3. Pulses are measured using internal timer, 
-// MCU will try to sleep as much as it could, interrupts at INT0 INT1 are used to wake it
-// next reading procedures are runned.. after that it goes back to sleep
+// TODO: MCU will try to sleep as much as it could, interrupts at INT0 INT1 are used to wake it
+// TODO: next reading procedures are runned.. after that it goes back to sleep
 // I'm using 8-bit Timer/Counter0 for measuring length of pulses (due to fact, that this is "cross-chip")
 // Inputs are "blocking" (does it makes any sense to to it non-blocking?)
 
@@ -145,7 +145,7 @@ static void audio_bad() {
 }
 
 static void handle_call_input(void) {
-    uint8_t readed = read_morse(CALL_INPUT, 1, 4);
+    uint8_t readed = read_morse(CALL_INPUT, 0, 4);
 
     // this is the only place we use WDT... why here? if this hangs
     // intercom will "beep" all the time... sure, somebody will get angry because of this
@@ -159,13 +159,13 @@ static void handle_call_input(void) {
         wdt_reset();
         _delay_ms(1000);
         wdt_reset();
-        OUTPUT_PORT &= ~_BV(OPTOCOUPLER_OUTPUT);
+        OUTPUT_PORT &= ~(_BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT));
     } else {
         audio_bad();
     }
     wdt_disable();
 
-    // blink_morse(readed);
+    blink_morse(readed);
 }
 
 static void handle_program_input(void) {
@@ -214,7 +214,7 @@ int main(void) {
 
     // configure input ports
     INPUT_DDR = 0; // all inputs
-    INPUT_PORT = _BV(PROGRAM_INPUT); // set internal pullup for program button
+    INPUT_PORT = _BV(PROGRAM_INPUT) | _BV(CALL_INPUT); // set internal pullup for program button and CALL
 
     // configure output ports
     OUTPUT_PORT = 0; // set all to low
@@ -233,8 +233,11 @@ int main(void) {
 
     // main loop
     for(;;) {
-        if(bit_is_set(INPUT_PIN, CALL_INPUT)) {
+        if(bit_is_clear(INPUT_PIN, CALL_INPUT)) {
             handle_call_input();
+            OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
+            _delay_ms(10);
+            OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
         } else if(bit_is_clear(INPUT_PIN, PROGRAM_INPUT)) {
             handle_program_input();
         }
