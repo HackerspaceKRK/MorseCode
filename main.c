@@ -10,22 +10,21 @@
 // PIN CONFIGURATION:
 //  INPUTS:
 //   PD2 (INT0) - CALL INPUT (also wake-up interrupt), external pull-down, goes low when triggered
-//   PD3 (INT1) - PROGRAM CODE PUSH BUTTON, need internal pull-up, goes low when triggeded
+//   PD3 (INT1) - PROGRAM CODE PUSH BUTTON, need internal pull-up, goes low when triggered
 //  OUTPUTS:
 //   PB0 - OPTOCOUPLER (high active)
 //   PB3 - TRANSISTOR FOR GENERATING AUDIO (high active)
 //   PB2 - STATUS LED (high active)
 
 // HOW THIS SHIT IS SUPPOSED TO WORK:
-// 1. Store code in EEPROM as 1 byte. eg. 10111000 means 1-long, 1-short, 3-long
-// 2. Code programming is done by pushing PROGRAM CODE PUSH BUTTTON for ~5s (STATUS LED will starts
-//    blinking, next enter new code, finish entering with long push of PROGRAM CODE PUSH BUTTON (~5s)
-//    STATUS LED will blink
-// 3. Pulses are measured using internal timer, 
-// TODO: MCU will try to sleep as much as it could, interrupts at INT0 INT1 are used to wake it
-// TODO: next reading procedures are runned.. after that it goes back to sleep
-// I'm using 8-bit Timer/Counter0 for measuring length of pulses (due to fact, that this is "cross-chip")
-// Inputs are "blocking" (does it makes any sense to to it non-blocking?)
+// 1. Code is stored in EEPROM as 1 byte. eg. 10111000 means 1-long, 1-short, 3-long
+// 2. Setting the code is done by pushing PROGRAM CODE PUSH BUTTTON for ~10s (STATUS LED will start
+//    blinking, then enter the new code and wait for the STATUS LED to blink (it should blink the new code)
+// 3. Current code is displayed after pressing PROGRAM CODE PUSH BUTTON for ~4s.
+// 4. Pulses are measured using internal timer
+// I'm using 8-bit Timer/Counter0 for measuring length of pulses
+// Inputs are "blocking" (does it make any sense to make it non-blocking?)
+// Board is prepared for putting uC to sleep... (all inputs are active on LOW state), but probably this is not necessary.
 
 // DEFINES
 #define INPUT_DDR DDRD
@@ -145,13 +144,13 @@ static void audio_bad() {
 }
 
 static void handle_call_input(void) {
-    uint8_t readed = read_morse(CALL_INPUT, 0, 4);
+    uint8_t read = read_morse(CALL_INPUT, 0, 4);
 
-    // this is the only place we use WDT... why here? if this hangs
-    // intercom will "beep" all the time... sure, somebody will get angry because of this
-    // or if this fails we will burn electrotap
+    // this is the only place we use WDT... why here? if this hung
+    // intercom would "beep" all the time... sure, somebody could get angry because of this
+    // or if this failed we would burn electrotap (neighbor would get angry...)
     wdt_enable(WDTO_2S);
-    if(readed == good_code) {
+    if(read == good_code) {
         OUTPUT_PORT |= _BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT);
         _delay_ms(1000);
         wdt_reset();
@@ -165,7 +164,7 @@ static void handle_call_input(void) {
     }
     wdt_disable();
 
-    blink_morse(readed);
+    blink_morse(read);
 }
 
 static void handle_program_input(void) {
@@ -180,10 +179,10 @@ static void handle_program_input(void) {
         // turn led off
         OUTPUT_PORT &= ~_BV(STATUS_LED_OUTPUT);
 
-        uint8_t readed = read_morse(PROGRAM_INPUT, 0, PULSE_MAX);
+        uint8_t read = read_morse(PROGRAM_INPUT, 0, PULSE_MAX);
 
-        // TODO: remove this, this is only for testing :P
-        if(!readed) {
+        // ignore empty code
+        if(!read) {
             OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
             _delay_ms(1000);
 
@@ -199,10 +198,10 @@ static void handle_program_input(void) {
         }
         _delay_ms(200);
 
-        blink_morse(readed);
+        blink_morse(read);
 
-        eeprom_update_byte(&CODE_EEPROM, readed);
-        good_code = readed;
+        eeprom_update_byte(&CODE_EEPROM, read);
+        good_code = read;
     } else if(len > 3) {
         blink_morse(good_code);
     }
@@ -244,7 +243,7 @@ int main(void) {
     }
 }
 
-// well... following stuff looks awful :<
+// well... the following stuff looks awful :<
 ISR(TIMER0_OVF_vect) {
     timer_count++;
     // OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
