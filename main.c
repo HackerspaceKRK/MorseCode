@@ -164,7 +164,7 @@ static void handle_call_input(void) {
     }
     wdt_disable();
 
-    blink_morse(read);
+    // blink_morse(read);
 }
 
 static void handle_program_input(void) {
