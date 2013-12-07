@@ -93,7 +93,8 @@ static uint8_t pulse_length(uint8_t pin, uint8_t high_low, uint8_t timeout) {
     TIMSK |= _BV(TOIE0); // enable overflow interrupt
     timer_count = 0;
 
-    while(pin_is(pin, high_low) && timer_count<timeout) {};
+    while(pin_is(pin, high_low) && timer_count<timeout)
+        wdt_reset();
 
     TCCR0B = 0;
 
@@ -136,9 +137,11 @@ static void blink_morse(uint8_t morse) {
     }
 
     for(i=0; i<=len; i++) {
+        wdt_reset();
         OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
         if(_BV(i) & morse) { // 1
             _delay_ms(900);
+            wdt_reset();
         } else {
             _delay_ms(100);
         }
@@ -156,16 +159,13 @@ static void audio_bad() {
     while(--timer) {
         OUTPUT_PORT ^= _BV(AUDIO_OUTPUT);
         _delay_us(200);
+        wdt_reset();
     }    
 }
 
 static void handle_call_input(void) {
     uint8_t read = read_morse(CALL_INPUT, 0, 4);
-
-    // this is the only place we use WDT... why here? if this hung
-    // intercom would "beep" all the time... sure, somebody could get angry because of this
-    // or if this failed we would burn electrotap (neighbor would get angry...)
-    wdt_enable(WDTO_2S);
+    
     if(read == good_code) {
         OUTPUT_PORT |= _BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT);
         _delay_ms(1000);
@@ -178,9 +178,6 @@ static void handle_call_input(void) {
     } else {
         audio_bad();
     }
-    wdt_disable();
-
-    // blink_morse(read);
 }
 
 static void handle_program_input(void) {
@@ -190,6 +187,7 @@ static void handle_program_input(void) {
         while(bit_is_clear(INPUT_PIN, PROGRAM_INPUT)) {
             OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
             _delay_ms(50);
+            wdt_reset();
         }
 
         // turn led off
@@ -200,10 +198,16 @@ static void handle_program_input(void) {
         // ignore empty code
         if(!read) {
             OUTPUT_PORT |= _BV(STATUS_LED_OUTPUT);
+            
+            wdt_reset();
             _delay_ms(1000);
+
+            OUTPUT_PORT &= ~_BV(STATUS_LED_OUTPUT);
 
             return;
         }
+
+        wdt_reset();
 
         _delay_ms(200);
 
@@ -212,6 +216,9 @@ static void handle_program_input(void) {
             OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
             _delay_ms(50);
         }
+
+        wdt_reset();
+
         _delay_ms(200);
 
         blink_morse(read);
@@ -246,8 +253,11 @@ int main(void) {
     _delay_ms(100);
     OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
 
+    wdt_enable(WDTO_2S);
+
     // main loop
     for(;;) {
+        wdt_reset();
         if(bit_is_clear(INPUT_PIN, CALL_INPUT)) {
             handle_call_input();
             OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
