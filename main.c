@@ -27,6 +27,7 @@
 //  INPUTS:
 //   PD2 (INT0) - CALL INPUT (also wake-up interrupt), external pull-down, goes low when triggered
 //   PD3 (INT1) - PROGRAM CODE PUSH BUTTON, need internal pull-up, goes low when triggered
+//   PD6        - PARTY MODE, if enabled, any signal will trigger gate opening
 //  OUTPUTS:
 //   PB0 - OPTOCOUPLER (high active)
 //   PB3 - TRANSISTOR FOR GENERATING AUDIO (high active)
@@ -38,6 +39,7 @@
 //    blinking, then enter the new code and wait for the STATUS LED to blink (it should blink the new code)
 // 3. Current code is displayed after pressing PROGRAM CODE PUSH BUTTON for ~4s.
 // 4. Pulses are measured using internal timer
+// 5. If party mode is on, any call will open a gate
 // I'm using 8-bit Timer/Counter0 for measuring length of pulses
 // Inputs are "blocking" (does it make any sense to make it non-blocking?)
 // Board is prepared for putting uC to sleep... (all inputs are active on LOW state), but probably this is not necessary.
@@ -49,6 +51,7 @@
 
 #define CALL_INPUT PD2
 #define PROGRAM_INPUT PD3
+#define PARTY_INPUT PD6
 //--
 #define OUTPUT_DDR DDRB
 #define OUTPUT_PORT PORTB
@@ -163,18 +166,28 @@ static void audio_bad() {
     }    
 }
 
+static void open_the_gate(void) {
+    OUTPUT_PORT |= _BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT);
+    _delay_ms(1000);
+    wdt_reset();
+    _delay_ms(1000);
+    wdt_reset();
+    _delay_ms(1000);
+    wdt_reset();
+    OUTPUT_PORT &= ~(_BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT));
+}
+
 static void handle_call_input(void) {
+    if(bit_is_clear(INPUT_PIN, PARTY_INPUT)) { // party mode is on
+        open_the_gate();
+
+        return;
+    }
+
     uint8_t read = read_morse(CALL_INPUT, 0, 4);
     
     if(read == good_code) {
-        OUTPUT_PORT |= _BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT);
-        _delay_ms(1000);
-        wdt_reset();
-        _delay_ms(1000);
-        wdt_reset();
-        _delay_ms(1000);
-        wdt_reset();
-        OUTPUT_PORT &= ~(_BV(OPTOCOUPLER_OUTPUT) | _BV(STATUS_LED_OUTPUT));
+        open_the_gate();
     } else {
         audio_bad();
     }
@@ -236,7 +249,7 @@ int main(void) {
 
     // configure input ports
     INPUT_DDR = 0; // all inputs
-    INPUT_PORT = _BV(PROGRAM_INPUT) | _BV(CALL_INPUT); // set internal pullup for program button and CALL
+    INPUT_PORT = _BV(PROGRAM_INPUT) | _BV(CALL_INPUT) | _BV(PARTY_INPUT); // set internal pullup for program button and CALL
 
     // configure output ports
     OUTPUT_PORT = 0; // set all to low
