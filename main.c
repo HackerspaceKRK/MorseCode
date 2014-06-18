@@ -27,7 +27,6 @@
 //  INPUTS:
 //   PD2 (INT0) - CALL INPUT (also wake-up interrupt), external pull-down, goes low when triggered
 //   PD3 (INT1) - PROGRAM CODE PUSH BUTTON, need internal pull-up, goes low when triggered
-//   PD6        - PARTY MODE, if enabled, any signal will trigger gate opening
 //  OUTPUTS:
 //   PB0 - OPTOCOUPLER (high active)
 //   PB3 - TRANSISTOR FOR GENERATING AUDIO (high active)
@@ -51,7 +50,6 @@
 
 #define CALL_INPUT PD2
 #define PROGRAM_INPUT PD3
-#define PARTY_INPUT PD6
 //--
 #define OUTPUT_DDR DDRB
 #define OUTPUT_PORT PORTB
@@ -61,8 +59,8 @@
 #define STATUS_LED_OUTPUT PB2
 
 // tweaks
-#define PULSE_MAX 20
-#define PULSE_LONG 2
+#define PULSE_MAX 60
+#define PULSE_LONG 20
 
 volatile uint8_t code = 0;
 volatile uint8_t timer_count = 0;
@@ -90,23 +88,41 @@ static uint8_t pin_is(uint8_t pin, uint8_t state) {
 static uint8_t pulse_length(uint8_t pin, uint8_t high_low, uint8_t timeout) {
     _delay_ms(50); // for debouncing
 
-    // configure Timer/Counter0
-    TCNT0 = 0;
-    TCCR0B |= _BV(CS02) | _BV(CS00); // CK/1024
-    TIMSK |= _BV(TOIE0); // enable overflow interrupt
     timer_count = 0;
 
     while(pin_is(pin, high_low) && timer_count<timeout)
         wdt_reset();
 
-    TCCR0B = 0;
-
     return timer_count;
+}
+
+static uint8_t readed_to_code(uint8_t values[8]) {
+    uint8_t i;
+    uint8_t code = 0;
+
+    uint8_t maxval = values[0];
+    for (i = 0; i < 8; ++i) {
+        const uint8_t currval = values[i];
+        if(currval > maxval)
+            maxval = currval;
+    }
+
+    maxval /= 2;
+
+    // we recognise short one as 1/2 of the longest one :)
+    for (i = 0; i < 8; ++i) {
+        if(values[i] > maxval)
+            code |= _BV(i);
+    }
+
+    return code;
 }
 
 static uint8_t read_morse(uint8_t pin, uint8_t high_low, uint8_t timeout) {
     uint8_t i = 0; // position in code
     uint8_t code = 0; // empty code
+
+    uint8_t values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     for(i=0; i<8; i++) {
         // wait for pulse
@@ -114,18 +130,14 @@ static uint8_t read_morse(uint8_t pin, uint8_t high_low, uint8_t timeout) {
             uint8_t wait_len = pulse_length(pin, high_low^1, timeout);
 
             if(wait_len == timeout) // timeout
-                return code;
+                return readed_to_code(values);
             else
                 break;
         }
 
         uint8_t r = pulse_length(pin, high_low, PULSE_MAX);
 
-        if(r > PULSE_LONG) {
-            code |= _BV(i);
-            if(r == PULSE_MAX)
-                break;
-        }
+        values[i] = r;
     }
 
     return code;
@@ -154,9 +166,8 @@ static void blink_morse(uint8_t morse) {
     }
 }
 
-static void audio_bad() {
+static void audio_bad(void) {
     // software audio generation, we should do this by PWM...
-
     int timer = 2553; // must be odd
 
     while(--timer) {
@@ -178,19 +189,20 @@ static void open_the_gate(void) {
 }
 
 static void handle_call_input(void) {
-    if(bit_is_clear(INPUT_PIN, PARTY_INPUT)) { // party mode is on
-        open_the_gate();
+    uint8_t read = read_morse(CALL_INPUT, 0, PULSE_MAX);
 
-        return;
-    }
-
-    uint8_t read = read_morse(CALL_INPUT, 0, 4);
-    
     if(read == good_code) {
         open_the_gate();
-    } else {
+    } else if(read != 0x01) { // ignore when this is one pulse
         audio_bad();
     }
+}
+
+static void configure_timer(void) {
+    // configure Timer/Counter0
+    TCNT0 = 0;
+    TCCR0B |= _BV(CS01) | _BV(CS00); // CK/64
+    TIMSK |= _BV(TOIE0); // enable overflow interrupt
 }
 
 static void handle_program_input(void) {
@@ -249,7 +261,7 @@ int main(void) {
 
     // configure input ports
     INPUT_DDR = 0; // all inputs
-    INPUT_PORT = _BV(PROGRAM_INPUT) | _BV(CALL_INPUT) | _BV(PARTY_INPUT); // set internal pullup for program button and CALL
+    INPUT_PORT = _BV(PROGRAM_INPUT) | _BV(CALL_INPUT); // set internal pullup for program button and CALL
 
     // configure output ports
     OUTPUT_PORT = 0; // set all to low
@@ -268,14 +280,13 @@ int main(void) {
 
     wdt_enable(WDTO_2S);
 
+    configure_timer();
+
     // main loop
     for(;;) {
         wdt_reset();
         if(bit_is_clear(INPUT_PIN, CALL_INPUT)) {
             handle_call_input();
-            OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
-            _delay_ms(10);
-            OUTPUT_PORT ^= _BV(STATUS_LED_OUTPUT);
         } else if(bit_is_clear(INPUT_PIN, PROGRAM_INPUT)) {
             handle_program_input();
         }

@@ -213,7 +213,7 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 
 # Default target. COF target added by AMTools
 all: begin gccversion sizebefore $(TARGET).elf $(TARGET).hex $(TARGET).eep \
-	$(TARGET).lss $(TARGET).sym $(TARGET).cof sizeafter finished end
+	$(TARGET).lss $(TARGET).sym sizeafter finished end
 
 
 # Eye candy.
